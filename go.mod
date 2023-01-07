@@ -1,4 +1,4 @@
-module qtinstaller
+module github.com/abiiranathan/qtinstaller
 
 go 1.19
 

@@ -5,8 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"qtinstaller/qtinstaller"
 
+	"github.com/abiiranathan/qtinstaller/qtinstaller"
 	"github.com/joho/godotenv"
 )
 
