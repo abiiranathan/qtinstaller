@@ -1,3 +1,4 @@
+// Package qtinstaller provides utilities for building Qt Installer Framework packages.
 package qtinstaller
 
 import (
@@ -6,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -54,9 +56,20 @@ var defaultConfig = Config{
 	LicencePath:   "licence.txt",
 }
 
-// Writes the default .env file in the same directory.
-// Returns an error if os.WriteFile fails.
+// Platform-specific example values for the generated .env template.
+var platformDefaults = map[string]struct{ exePath, installerName, iconFile string }{
+	"windows": {`C:\Qt\Projects\Releases\app.exe`, "Installer.exe", "favicon.ico"},
+	"linux":   {"/path/to/release/app", "Installer", "favicon.png"},
+	"darwin":  {"/path/to/release/app", "Installer", "favicon.png"},
+}
+
+// GenerateConfigFile writes the default .env file in the same directory.
 func GenerateConfigFile() error {
+	defaults, ok := platformDefaults[runtime.GOOS]
+	if !ok {
+		defaults = platformDefaults["linux"]
+	}
+
 	text := fmt.Sprintf(configTextTemplate,
 		DisplayName,
 		Publisher,
@@ -64,19 +77,18 @@ func GenerateConfigFile() error {
 		ReleaseDate,
 		Version,
 		PackageName,
-		Executable,
-		InstallerName,
+		Executable, defaults.exePath,
+		InstallerName, defaults.installerName,
 		LicenceName,
 		LicenceFile,
 		Logo,
-		InstallerApplicationIcon,
+		InstallerApplicationIcon, defaults.iconFile,
 	)
 	return os.WriteFile(".env", []byte(text), 0640)
 }
 
-// Returns the expected default directories for the
-// Qt installer framework.
-// The config, packages(having data and meta subdirectories)
+// GetInstallerDirs returns the expected default directories for the
+// Qt installer framework (config, data, and meta).
 func GetInstallerDirs(config *Config) *installerDirs {
 	dirs := &installerDirs{
 		Config: filepath.Join("./config"),
@@ -100,25 +112,30 @@ func dirAbsPaths(dirs *installerDirs) {
 	dirs.Data = DataDir
 }
 
-// Generate data from config and dirs and write this data into the appropriate files.
+// WriteFiles generates data from config and dirs and writes it into the appropriate files.
 func WriteFiles(config *Config, dirs *installerDirs) error {
-	// get InstallerWindowIcon from logo
-	baseDir, logoName := filepath.Split(config.Logo)
-	installLogoPath := filepath.Join(baseDir, installerLogo+filepath.Ext(logoName))
+	// Compute base names for files copied to config dir
+	logoBase := filepath.Base(config.Logo)
+	installLogoName := installerLogo + filepath.Ext(logoBase)
+
+	installerIconBase := ""
+	if config.InstallerApplicationIcon != "" {
+		installerIconBase = filepath.Base(config.InstallerApplicationIcon)
+	}
 
 	// write config/config.xml
 	err := os.WriteFile(
 		filepath.Join(dirs.Config, "config.xml"),
 		[]byte(fmt.Sprintf(configXMLTemplate,
-			config.DisplayName,              // name
-			config.Version,                  // version
-			config.DisplayName,              // title
-			config.Publisher,                // publisher
-			config.DisplayName,              // StartMenuDir. Name of the default program group for the product in the Windows Start menu
-			installLogoPath,                 //InstallerWindowIcon
-			config.InstallerApplicationIcon, // InstallerApplicationIcon
-			config.Logo,                     // Logo
-			config.DisplayName,              // TargetDir. Default target directory for installation.
+			config.DisplayName, // Name
+			config.Version,     // Version
+			config.DisplayName, // Title
+			config.Publisher,   // Publisher
+			config.DisplayName, // StartMenuDir
+			installLogoName,    // InstallerWindowIcon (base name in config dir)
+			installerIconBase,  // InstallerApplicationIcon (base name in config dir)
+			logoBase,           // Logo (base name in config dir)
+			config.DisplayName, // TargetDir
 		)),
 		0640,
 	)
@@ -134,15 +151,17 @@ func WriteFiles(config *Config, dirs *installerDirs) error {
 	}
 
 	// duplicate logo and save copy as installerlogo
-	err = copyFileToDir(config.Logo, dirs.Config, installLogoPath)
+	err = copyFileToDir(config.Logo, dirs.Config, installLogoName)
 	if err != nil {
 		return err
 	}
 
-	// copy application icon(.ico)
-	err = copyFileToDir(config.InstallerApplicationIcon, dirs.Config)
-	if err != nil {
-		return err
+	// copy application icon (if provided; optional on Linux)
+	if config.InstallerApplicationIcon != "" {
+		err = copyFileToDir(config.InstallerApplicationIcon, dirs.Config)
+		if err != nil {
+			return err
+		}
 	}
 
 	// copy executable
@@ -151,24 +170,32 @@ func WriteFiles(config *Config, dirs *installerDirs) error {
 		return err
 	}
 
+	// On Linux, also copy logo to data dir for desktop entry icon
+	if runtime.GOOS != "windows" {
+		err = copyFileToDir(config.Logo, dirs.Data)
+		if err != nil {
+			return err
+		}
+	}
+
 	// copy licence
 	err = copyFileToDir(config.LicencePath, dirs.Meta)
 	if err != nil {
 		return err
 	}
 
-	// copy package.xml
+	// write package.xml
 	err = os.WriteFile(
 		filepath.Join(dirs.Meta, "package.xml"),
-		[]byte(fmt.Sprintf(
+		fmt.Appendf(nil,
 			packageXMLTemplate,
 			config.DisplayName,
 			config.Description,
 			config.Version,
 			config.ReleaseDate,
 			config.LicenceName,
-			config.LicencePath,
-		)),
+			filepath.Base(config.LicencePath),
+		),
 		0640,
 	)
 
@@ -178,20 +205,19 @@ func WriteFiles(config *Config, dirs *installerDirs) error {
 
 	// Write the installscript.qs
 	baseName := filepath.Base(config.Executable)
-
-	// Path to the windows StartMenu link
 	linkName := strings.TrimSuffix(baseName, filepath.Ext(baseName)) + ".lnk"
+	desktopFile := config.PkgName + ".desktop"
 
 	return os.WriteFile(
 		filepath.Join(dirs.Meta, "installscript.qs"),
-		[]byte(fmt.Sprintf(
+		fmt.Appendf(nil,
 			installScriptTmpl,
 			baseName, linkName, baseName,
 			baseName, linkName, baseName,
-		)),
+			desktopFile, baseName, logoBase, config.DisplayName,
+		),
 		0640,
 	)
-
 }
 
 // copyFileToDir copies the srcFile to a dstDir directory.
@@ -232,9 +258,15 @@ func setConfigVar(param *string, key string, required bool) {
 	}
 }
 
-// Returns a new config file.
+// NewConfig returns a new Config populated from environment variables.
 func NewConfig() *Config {
-	config := &defaultConfig
+	configCopy := defaultConfig
+	config := &configCopy
+
+	// Set platform-aware default installer name
+	if runtime.GOOS != "windows" {
+		config.InstallerName = "Installer"
+	}
 
 	// required env variables
 	setConfigVar(&config.DisplayName, DisplayName, true)
@@ -244,8 +276,14 @@ func NewConfig() *Config {
 	setConfigVar(&config.LicenceName, LicenceName, true)
 	setConfigVar(&config.LicencePath, LicenceFile, true)
 	setConfigVar(&config.Publisher, Publisher, true)
-	setConfigVar(&config.InstallerApplicationIcon, InstallerApplicationIcon, true)
 	setConfigVar(&config.Logo, Logo, true)
+
+	// InstallerApplicationIcon is required on Windows, optional on Linux
+	if runtime.GOOS == "windows" {
+		setConfigVar(&config.InstallerApplicationIcon, InstallerApplicationIcon, true)
+	} else {
+		setConfigVar(&config.InstallerApplicationIcon, InstallerApplicationIcon, false)
+	}
 
 	// Optional env variables
 	setConfigVar(&config.ReleaseDate, ReleaseDate, false)
@@ -254,8 +292,7 @@ func NewConfig() *Config {
 	return config
 }
 
-// Creates the directories specified in dirs.
-// The config, data and meta directories.
+// CreateDirectoryStructure creates the config, data, and meta directories.
 // Old directories are deleted if they exist.
 func CreateDirectoryStructure(dirs *installerDirs) error {
 	// Remove old directories.
@@ -264,14 +301,14 @@ func CreateDirectoryStructure(dirs *installerDirs) error {
 	os.RemoveAll(dirs.Data)
 
 	// Create new directories.
-	if err := os.MkdirAll(dirs.Config, 0640); err != nil {
+	if err := os.MkdirAll(dirs.Config, 0755); err != nil {
 		return err
 	}
 
-	if err := os.MkdirAll(dirs.Meta, 0640); err != nil {
+	if err := os.MkdirAll(dirs.Meta, 0755); err != nil {
 		return err
 	}
-	return os.MkdirAll(dirs.Data, 0640)
+	return os.MkdirAll(dirs.Data, 0755)
 }
 
 func panicIfNotFileExists(path ...string) {
@@ -283,26 +320,49 @@ func panicIfNotFileExists(path ...string) {
 }
 
 func AssertFilesExist(config *Config) {
-	panicIfNotFileExists(
+	required := []string{
 		config.Executable,
 		config.LicencePath,
-		config.InstallerApplicationIcon,
 		config.Logo,
-	)
+	}
+	if config.InstallerApplicationIcon != "" {
+		required = append(required, config.InstallerApplicationIcon)
+	}
+	panicIfNotFileExists(required...)
 }
 
-func GetQtBinaries() (windeployqt string, binarycreator string, err error) {
-	// Make sure windeployqt is in PATH
-	windqt, err := exec.LookPath("windeployqt.exe")
-	if err != nil {
-		return "", "", fmt.Errorf("windeployqt.exe is not installed or not in PATH. Install it and try again")
+// GetQtBinaries locates the deploy tool and binarycreator.
+// If the deploy tool is not in PATH, it attempts to find or download it.
+func GetQtBinaries() (deployTool string, binaryCreator string, err error) {
+	if runtime.GOOS == "windows" {
+		deployTool, err = exec.LookPath("windeployqt.exe")
+		if err != nil {
+			log.Println("windeployqt.exe not in PATH, searching common Qt installation paths...")
+			deployTool, err = findWinDeployQt()
+			if err != nil {
+				return "", "", err
+			}
+		}
+
+		binaryCreator, err = exec.LookPath("binarycreator.exe")
+		if err != nil {
+			return "", "", fmt.Errorf("binarycreator.exe is not installed or not in PATH. Install the Qt Installer Framework and try again")
+		}
+	} else {
+		deployTool, err = exec.LookPath("linuxdeployqt")
+		if err != nil {
+			log.Println("linuxdeployqt not in PATH, downloading from GitHub...")
+			deployTool, err = downloadLinuxDeployQt()
+			if err != nil {
+				return "", "", err
+			}
+		}
+
+		binaryCreator, err = exec.LookPath("binarycreator")
+		if err != nil {
+			return "", "", fmt.Errorf("binarycreator is not installed or not in PATH. Install the Qt Installer Framework and try again")
+		}
 	}
 
-	// Make sure binarycreator is in PATH
-	binCreator, err := exec.LookPath("binarycreator.exe")
-	if err != nil {
-		return "", "", fmt.Errorf("binarycreator.exe is not installed or not in PATH. Install it and try again")
-	}
-
-	return windqt, binCreator, nil
+	return deployTool, binaryCreator, nil
 }

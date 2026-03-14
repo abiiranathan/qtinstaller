@@ -20,10 +20,10 @@ const configTextTemplate = `
 %s=com.example.appname
 
 # The path to the release Qt application
-%s=C:\Qt\Projects\Releases\app.exe
+%s=%s
 
 # Output name for the installer
-%s=Installer.exe
+%s=%s
 
 # Name of the license
 %s=MIT LICENCE
@@ -34,8 +34,9 @@ const configTextTemplate = `
 # Filename for a logo in PNG format used as QWizard::LogoPixmap.
 %s=logo.png
 
-# Filename for a custom installer icon.
-%s=favicon.ico
+# Filename for a custom installer icon (optional on Linux).
+# On Windows use .ico format. On Linux use .png format.
+%s=%s
 
 `
 
@@ -50,7 +51,6 @@ const configXMLTemplate = `<?xml version="1.0" encoding="UTF-8"?>
     <InstallerApplicationIcon>%s</InstallerApplicationIcon> 
     <Logo>%s</Logo> 
     <TargetDir>@ApplicationsDir@/%s</TargetDir> 
-    <WizardStyle>Aero</WizardStyle> 
     <WizardDefaultWidth>700</WizardDefaultWidth> 
     <WizardDefaultHeight>500</WizardDefaultHeight> 
 </Installer> 
@@ -95,6 +95,10 @@ Component.prototype.createOperations = function()
             "iconPath=@TargetDir@/%s",
             "iconId=0", 
             "description=Start Application")
+    } else {
+        component.addOperation("CreateDesktopEntry",
+            "%s",
+            "Type=Application\nExec=@TargetDir@/%s\nPath=@TargetDir@\nIcon=@TargetDir@/%s\nName=%s\nCategories=Utility;\nTerminal=false")
     } 
 }
 

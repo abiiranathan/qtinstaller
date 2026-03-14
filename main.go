@@ -5,16 +5,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 
 	"github.com/abiiranathan/qtinstaller/qtinstaller"
 	"github.com/joho/godotenv"
 )
 
-func init() {
-	godotenv.Load()
-}
-
 func main() {
+	godotenv.Load()
+
 	log.SetPrefix("qtinstaller: ")
 	log.SetFlags(log.Lshortfile)
 
@@ -27,8 +26,8 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Make sure windeployqt and binarycreator are installed and in PATH
-	windeployqt, binarycreator, err := qtinstaller.GetQtBinaries()
+	// Make sure deploy tool and binarycreator are installed and in PATH
+	deployTool, binarycreator, err := qtinstaller.GetQtBinaries()
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -55,8 +54,13 @@ func main() {
 	// get path to target exe in data directory.
 	targetExe := filepath.Join(dirs.Data, filepath.Base(config.Executable))
 
-	// Run windeployqt on the executable to gather neccessary dlls.
-	output, err := exec.Command(windeployqt, "--no-translations", "--dir", dirs.Data, targetExe).CombinedOutput()
+	// Run deploy tool to gather necessary libraries.
+	var output []byte
+	if runtime.GOOS == "windows" {
+		output, err = exec.Command(deployTool, "--no-translations", "--dir", dirs.Data, targetExe).CombinedOutput()
+	} else {
+		output, err = exec.Command(deployTool, targetExe, "-no-translations", "-always-overwrite").CombinedOutput()
+	}
 	if err != nil {
 		log.Fatalln(string(output))
 	}
