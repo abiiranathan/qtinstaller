@@ -57,7 +57,6 @@ const configXMLTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 </Installer> 
 
 `
-const configXMLTemplate = `<?xml version="1.0" encoding="UTF-8"?> 
 
 const packageXMLTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 <Package>
@@ -71,7 +70,6 @@ const packageXMLTemplate = `<?xml version="1.0" encoding="UTF-8"?>
     <Default>true</Default>
     <Script>installscript.qs</Script>
 </Package>
-
 `
 
 const controlScriptTmpl = `

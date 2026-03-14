@@ -222,9 +222,16 @@ func WriteFiles(config *Config, dirs *installerDirs) error {
 		filepath.Join(dirs.Meta, "installscript.qs"),
 		fmt.Appendf(nil,
 			installScriptTmpl,
+			// Windows: Start Menu shortcut
 			baseName, linkName, baseName,
+			// Windows: Desktop shortcut
 			baseName, linkName, baseName,
+			// Windows: Uninstall shortcut (DisplayName for "Uninstall %s.lnk"), icon
+			config.DisplayName, baseName,
+			// Linux: app desktop entry
 			desktopFile, baseName, logoBase, config.DisplayName,
+			// Linux: uninstall desktop entry
+			config.PkgName, logoBase, config.DisplayName,
 		),
 		0640,
 	)
