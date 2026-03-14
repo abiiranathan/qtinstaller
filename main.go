@@ -58,11 +58,23 @@ func main() {
 	var output []byte
 	if runtime.GOOS == "windows" {
 		output, err = exec.Command(deployTool, "--no-translations", "--dir", dirs.Data, targetExe).CombinedOutput()
-	} else {
+		if err != nil {
+			log.Fatalln(string(output))
+		}
+	} else if deployTool != "" {
 		output, err = exec.Command(deployTool, targetExe, "-no-translations", "-always-overwrite").CombinedOutput()
-	}
-	if err != nil {
-		log.Fatalln(string(output))
+		if err != nil {
+			log.Printf("External deploy tool failed: %s\n", string(output))
+			log.Println("Falling back to built-in Qt library deployer...")
+			if err := qtinstaller.DeployQtLibs(targetExe, dirs.Data); err != nil {
+				log.Fatalln(err)
+			}
+		}
+	} else {
+		// No external tool — use built-in deployer
+		if err := qtinstaller.DeployQtLibs(targetExe, dirs.Data); err != nil {
+			log.Fatalln(err)
+		}
 	}
 
 	// Run binary creator to generate the installer.

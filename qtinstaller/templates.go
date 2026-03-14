@@ -51,6 +51,7 @@ const configXMLTemplate = `<?xml version="1.0" encoding="UTF-8"?>
     <InstallerApplicationIcon>%s</InstallerApplicationIcon> 
     <Logo>%s</Logo> 
     <TargetDir>@ApplicationsDir@/%s</TargetDir> 
+    <ControlScript>controlscript.qs</ControlScript>
     <WizardDefaultWidth>700</WizardDefaultWidth> 
     <WizardDefaultHeight>500</WizardDefaultHeight> 
 </Installer> 
@@ -70,6 +71,13 @@ const packageXMLTemplate = `<?xml version="1.0" encoding="UTF-8"?>
     <Script>installscript.qs</Script>
 </Package>
 
+`
+
+const controlScriptTmpl = `
+function Controller()
+{
+    installer.setDefaultPageVisible(QInstaller.TargetDirectory, true);
+}
 `
 
 const installScriptTmpl = `
@@ -96,8 +104,10 @@ Component.prototype.createOperations = function()
             "iconId=0", 
             "description=Start Application")
     } else {
+        component.addOperation("Execute", "chmod", "-R", "+x", "@TargetDir@",
+            "UNDOEXECUTE", "true")
         component.addOperation("CreateDesktopEntry",
-            "%s",
+            "@HomeDir@/.local/share/applications/%s",
             "Type=Application\nExec=@TargetDir@/%s\nPath=@TargetDir@\nIcon=@TargetDir@/%s\nName=%s\nCategories=Utility;\nTerminal=false")
     } 
 }

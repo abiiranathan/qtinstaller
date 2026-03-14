@@ -1,2 +1,16 @@
 *.exe
 .env
+
+# Build artifacts
+qtinstaller-cli
+config/
+packages/
+*-Installer
+*-Installer.exe
+
+# Example build outputs
+examples/simple/config/
+examples/simple/packages/
+examples/simple/helloqt/build/
+examples/simple/helloqt_bin
+*.sh

@@ -144,6 +144,16 @@ func WriteFiles(config *Config, dirs *installerDirs) error {
 		return err
 	}
 
+	// write config/controlscript.qs
+	err = os.WriteFile(
+		filepath.Join(dirs.Config, "controlscript.qs"),
+		[]byte(controlScriptTmpl),
+		0640,
+	)
+	if err != nil {
+		return err
+	}
+
 	// copy config images described in the config.xml above
 	err = copyFileToDir(config.Logo, dirs.Config)
 	if err != nil {
@@ -231,6 +241,11 @@ func copyFileToDir(srcFile, dstDir string, newName ...string) error {
 		return err
 	}
 
+	srcInfo, err := os.Stat(srcFile)
+	if err != nil {
+		return err
+	}
+
 	data, err := os.ReadFile(srcFile)
 	if err != nil {
 		return err
@@ -241,7 +256,7 @@ func copyFileToDir(srcFile, dstDir string, newName ...string) error {
 	if len(newName) > 0 {
 		dstPath = filepath.Join(dstDir, filepath.Base(newName[0]))
 	}
-	return os.WriteFile(dstPath, data, 0644)
+	return os.WriteFile(dstPath, data, srcInfo.Mode().Perm())
 }
 
 // Reads key from environment variables.
@@ -332,7 +347,8 @@ func AssertFilesExist(config *Config) {
 }
 
 // GetQtBinaries locates the deploy tool and binarycreator.
-// If the deploy tool is not in PATH, it attempts to find or download it.
+// If the deploy tool is not found, deployTool is empty and the caller
+// should fall back to DeployQtLibs on Linux.
 func GetQtBinaries() (deployTool string, binaryCreator string, err error) {
 	if runtime.GOOS == "windows" {
 		deployTool, err = exec.LookPath("windeployqt.exe")
@@ -349,13 +365,13 @@ func GetQtBinaries() (deployTool string, binaryCreator string, err error) {
 			return "", "", fmt.Errorf("binarycreator.exe is not installed or not in PATH. Install the Qt Installer Framework and try again")
 		}
 	} else {
-		deployTool, err = exec.LookPath("linuxdeployqt")
-		if err != nil {
-			log.Println("linuxdeployqt not in PATH, downloading from GitHub...")
-			deployTool, err = downloadLinuxDeployQt()
-			if err != nil {
-				return "", "", err
-			}
+		// Try external tools first: linuxdeployqt, cqtdeployer
+		deployTool, _ = exec.LookPath("linuxdeployqt")
+		if deployTool == "" {
+			deployTool, _ = exec.LookPath("cqtdeployer")
+		}
+		if deployTool == "" {
+			log.Println("No external deploy tool found, will use built-in Qt library deployer")
 		}
 
 		binaryCreator, err = exec.LookPath("binarycreator")
