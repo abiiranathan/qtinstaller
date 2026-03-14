@@ -57,6 +57,7 @@ const configXMLTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 </Installer> 
 
 `
+const configXMLTemplate = `<?xml version="1.0" encoding="UTF-8"?> 
 
 const packageXMLTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 <Package>
@@ -103,12 +104,24 @@ Component.prototype.createOperations = function()
             "iconPath=@TargetDir@/%s",
             "iconId=0", 
             "description=Start Application")
+        // Create Uninstall shortcut in Start Menu
+        component.addOperation("CreateShortcut", 
+            "@TargetDir@/uninstaller", 
+            "@StartMenuDir@/Uninstall %s.lnk",
+            "workingDirectory=@TargetDir@", 
+            "iconPath=@TargetDir@/%s",
+            "iconId=0", 
+            "description=Uninstall Application")
     } else {
         component.addOperation("Execute", "chmod", "-R", "+x", "@TargetDir@",
             "UNDOEXECUTE", "true")
         component.addOperation("CreateDesktopEntry",
             "@HomeDir@/.local/share/applications/%s",
             "Type=Application\nExec=@TargetDir@/%s\nPath=@TargetDir@\nIcon=@TargetDir@/%s\nName=%s\nCategories=Utility;\nTerminal=false")
+        // Create Uninstall desktop entry
+        component.addOperation("CreateDesktopEntry",
+            "@HomeDir@/.local/share/applications/uninstall-%s.desktop",
+            "Type=Application\nExec=@TargetDir@/uninstaller\nPath=@TargetDir@\nIcon=@TargetDir@/%s\nName=Uninstall %s\nCategories=Utility;\nTerminal=false")
     } 
 }
 
